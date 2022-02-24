@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: requester
+  name: requester
+  namespace: "03147725"
+spec:
+  containers:
+  - image: quay.io/mwasher/scapy:latest
+    name: container-name
+    args: 
+    - sleep
+    - inf
+    securityContext:
+      capabilities:
+        add:
+        - SYS_ADMIN
+        - SYS_PTRACE
+      privileged: true
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: receiver
+  name: receiver
+  namespace: "03147725"
+spec:
+  containers:
+  - image: quay.io/mwasher/scapy:latest
+    name: container-name
+    args: 
+    - sleep
+    - inf
+    securityContext:
+      capabilities:
+        add:
+        - SYS_ADMIN
+        - SYS_PTRACE
+      privileged: true

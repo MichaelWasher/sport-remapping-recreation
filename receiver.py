@@ -24,14 +24,15 @@ if len(pkt_list) < 1:
     exit(1)
 
 pkt = pkt_list[0]
+print("--------------------------------------------------------------------")
 print("Packet recieved")
 print(pkt.display())
 
 time.sleep(1)
 pkt=IP(dst=req_address)/UDP(dport=req_port, sport=rec_port)/Raw(load="test 1")
+print("--------------------------------------------------------------------")
 print("Packet to Send")
 print(pkt.display())
 
 
 send(pkt, iface=interface)
-

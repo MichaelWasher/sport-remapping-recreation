@@ -16,6 +16,7 @@ print(f"Rec Address: {rec_address}")
 
 # Send packet to Service
 pkt=IP(dst=rec_address)/UDP(dport=rec_port, sport=req_port)/Raw(load="test 1")
+print("--------------------------------------------------------------------")
 print("Packet to Send")
 print(pkt.display())
 send(pkt, iface=interface)
@@ -28,5 +29,6 @@ if len(pkt_list) < 1:
     exit(1)
 
 pkt = pkt_list[0]
+print("--------------------------------------------------------------------")
 print("Packet recieved")
 print(pkt.display())

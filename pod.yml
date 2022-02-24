@@ -4,7 +4,6 @@ metadata:
   labels:
     app: requester
   name: requester
-  namespace: "03147725"
 spec:
   containers:
   - image: quay.io/mwasher/scapy:latest
@@ -25,7 +24,6 @@ metadata:
   labels:
     app: receiver
   name: receiver
-  namespace: "03147725"
 spec:
   containers:
   - image: quay.io/mwasher/scapy:latest

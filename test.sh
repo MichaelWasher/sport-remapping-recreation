@@ -15,11 +15,14 @@ while [[ $(kubectl get pods -l app=receiver -o 'jsonpath={..status.conditions[?(
 while [[ $(kubectl get pods -l app=requester -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]]; do echo "waiting for requester pod" && sleep 1; done
 
 # Copy files into Pods
-oc cp receiver.py receiver:/
-oc cp requester.py requester:/
-sleep 2
+oc cp main.py receiver:/receiver.py
+oc cp main.py requester:/requester.py
 
 # Run the Test
-oc exec -t receiver -- python3 /receiver.py 2>&1 >receiver_logs &
+oc exec -t receiver -- sh -c "python3 -u /receiver.py --conn-end='receiver' 2>&1 >receiver_logs" &
 sleep 2
-oc exec -t requester -- python3 /requester.py 2>&1 >requester_logs
+oc exec -t requester -- sh -c "python3 -u /requester.py --no-reinit 2>&1 >requester_logs" 
+
+# Copy results back
+oc cp receiver:/receiver_logs receiver_logs
+oc cp requester:/requester_logs requester_logs

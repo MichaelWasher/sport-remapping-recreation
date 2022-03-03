@@ -3,16 +3,24 @@
 # NOTE: There are sleeps in this to make sure that each application can finish starting before continuing. These may not be long enough and cause an issue, but just re-run this once the flow-rules have expired.
 
 set -x
+
+term() {
+    echo "Cancelling test..."
+    pkill -P $$
+    
+    source ./kill.sh
+
+    # Copy results back
+    oc cp receiver:/receiver_logs receiver_logs
+    oc cp requester:/requester_logs requester_logs
+
+    exit 1
+}
+trap term SIGTERM SIGINT
+
 # Add Resources
-oc apply -f ./ns.yaml
+source ./setup.sh
 
-oc project 03147725
-oc apply -f svc.yaml
-oc apply -f ./colocated-pods.yaml
-
-# Wait for Pods to be ready
-while [[ $(kubectl get pods -l app=receiver -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]]; do echo "waiting for receiver pod" && sleep 1; done
-while [[ $(kubectl get pods -l app=requester -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}') != "True" ]]; do echo "waiting for requester pod" && sleep 1; done
 
 # Copy files into Pods
 oc cp main.py receiver:/receiver.py

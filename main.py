@@ -5,8 +5,8 @@ from random import seed
 from random import randint
 from datetime import datetime
 import argparse
+import socket
 
-comm_count=10_000
 interface='eth0'
 last_packet_time=datetime.now()
 # Initial Setup
@@ -51,37 +51,10 @@ def process_args():
     return args.req_port, args.rec_port, args.req_address, args.rec_address, args.conn_end, args.protocol, args.reinit
 
 
-def generate_packet(val):
+def packet_msg():
+    val = next(counter)
     rand = randint(0, 100)
-    return IP(dst=dst)/l4_proto(dport=dport, sport=sport)/Raw(load=f"{conn_end} counter {val} rand {rand}")
-
-def send_init_packet():
-    val = next(counter)
-    init_pkt=generate_packet(val)
-    print("--------------------------------------------------------------------")
-    print("Packet to Send")
-    print(init_pkt.display())
-    send(init_pkt, iface=interface)
-
-
-def respond(pkt):
-    # Bail early for final packet
-    if e.is_set():
-        return
-
-    global last_packet_time
-    last_packet_time=datetime.now()
-    print("--------------------------------------------------------------------")
-    print("Packet recieved")
-    print(pkt.display())
-    
-    val = next(counter)
-    resp_pkt=generate_packet(val)
-    print("--------------------------------------------------------------------")
-    print("Packet to Send")
-    print(resp_pkt.display())
-    send(resp_pkt, iface=interface)
-    print(flush=True)
+    return f"{conn_end} counter {val} rand {rand}"
 
 def packet_timer(e):
     while not e.is_set():
@@ -93,17 +66,8 @@ def packet_timer(e):
 
         if seconds_delta > 1 and seconds_delta % 5 == 0:
             print("Context Deadline Exceeded")
-            
-            # Bootstrap the connection again
-            if conn_end == "requester" and reinit:
-                print("Sending a new init packet")    
-                send_init_packet()
-
-        # Capped at 4 retries and then fail.
-        if seconds_delta > 20:
-            e.set()
-            # Send a terminating request to self
-            send(IP(dst=src, src=src)/l4_proto(dport=sport)/Raw(load="Closing connection - Ignore Me"))
+            break
+    os._exit(1)
 
 
 req_port,  rec_port, req_address, rec_address, conn_end, protocol, reinit = process_args()
@@ -117,20 +81,13 @@ print(f"Connection End: {conn_end}")
 listen_port = 0
 counter = itertools.count()
 
-l4_proto = UDP
-# TODO: Implement TCP in the tool and state...
-# if protocol == "tcp":
-#     l4_proto = TCP
-
 # If initial requester, start the communication
 if conn_end == "requester":
     dst = rec_address
     src = req_address
     dport=rec_port
     sport=req_port
-    send_init_packet()
 else:
-    comm_count += 1
     dst = req_address
     src = rec_address
     dport=req_port
@@ -142,10 +99,38 @@ e = threading.Event()
 timer_thread = threading.Thread(target=packet_timer, args=(e,))
 timer_thread.start()
 
+# Configure AddressPorts for communication
+hostname = socket.gethostname()
+pod_ip = socket.gethostbyname(hostname)
+
+srcAddressPort   = (pod_ip, sport)
+dstAddressPort   = (dst, dport)
+
 # # Expect to receive a packet to the same outgoing source
 # NOTE: This stops after e.is_set() and there is a packet arriving. Dont' wanna use supersockets to work around this limitation
-sniff(iface=interface, filter=f"udp and dst port {sport}", prn=respond, count=comm_count, stop_filter=lambda p: e.is_set())
-e.set()
+# UDP Socket config 
+print(f"Source Address: {srcAddressPort}")
+print(f"Destination Address: {dstAddressPort}")
+
+UDPServerSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+UDPServerSocket.bind(srcAddressPort)
+bufferSize  = 1024
+
+if conn_end == "requester":
+    msgBytes = str.encode(packet_msg())
+    UDPServerSocket.sendto(msgBytes, dstAddressPort)
+
+while True:
+    bytesAddressPair = UDPServerSocket.recvfrom(bufferSize)
+    
+    last_packet_time=datetime.now()
+    print("recv from", bytesAddressPair)
+
+    msgBytes = str.encode(packet_msg())
+    UDPServerSocket.sendto(msgBytes, dstAddressPort)
+    print("send to", (msgBytes, dstAddressPort))
+
+
 timer_thread.join()
 
 print("Closing gracefully")

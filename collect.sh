@@ -7,8 +7,16 @@ oc apply -f ./collector-pod.yaml
 
 debug_pod=collector
 
+# Keepalive is to avoid stale/timout issues with `oc debug/exec` requests
+keepalive() {
+    while true; do
+        sleep 1
+        echo -n .
+    done
+}
 # Triger PCAP in Pod
 pcap_outer(){
+    keepalive &
     mkdir -p /host/tmp/collect/
     pod_name=$1
     cont_id=`oc get pods -o json ${pod_name} | jq -r '.status.containerStatuses[0].containerID' | cut -d '/' -f 3`
@@ -18,7 +26,14 @@ pcap_outer(){
     tcpdump -i $veth -w /host/tmp/collect/${pod_name}-outer.pcap
 }
 
+pcap_any(){
+    keepalive &
+    mkdir -p /host/tmp/collect/
+    tcpdump -i any -w /host/tmp/collect/any.pcap
+}
+
 pcap_inner(){
+    keepalive &
     mkdir -p /host/tmp/collect/
     pod_name=$1
     cont_id=`oc get pods -o json $1 | jq -r '.status.containerStatuses[0].containerID' | cut -d '/' -f 3`
@@ -27,6 +42,7 @@ pcap_inner(){
 }
 
 conntrack_events(){
+    keepalive &
     mkdir -p /host/tmp/collect/
     chroot /host conntrack -E -o extended,timestamp 2>&1 > /host/tmp/collect/conntrack-events.txt
 }
@@ -43,16 +59,18 @@ term() {
 trap term SIGTERM SIGINT
 
 
-pod_script=$(declare -f pcap_outer pcap_inner conntrack_events)
+pod_script=$(declare -f keepalive pcap_any pcap_outer pcap_inner conntrack_events)
 
 echo "----------------------------------------------------------"
 echo "Starting the pcaps. These will run until failure of killed. Kill with Crtl + C to copy back the contents"
 echo "----------------------------------------------------------"
 
 oc exec -t "${debug_pod}" -- sh -c "$pod_script; conntrack_events" &
+oc exec -t "${debug_pod}" -- sh -c "$pod_script; pcap_any" &
 
 oc exec -t "${debug_pod}" -- sh -c "$pod_script; pcap_outer receiver" &
 oc exec -t "${debug_pod}" -- sh -c "$pod_script; pcap_outer requester" &
 
 oc exec -t "${debug_pod}" -- sh -c "$pod_script; pcap_inner receiver" &
 oc exec -t "${debug_pod}" -- sh -c "$pod_script; pcap_inner requester" 
+
